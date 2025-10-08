@@ -118,6 +118,12 @@ Peak GPU Memory Usage (top nodes):
 
 ## 🔧 Technical Details
 
+### Modular Architecture
+- **`__init__.py`**: Main module initialization, imports nodes and monitoring system
+- **`nodes.py`**: Contains the ExecutionTimeReporter node class and ComfyUI mappings
+- **`monitoring.py`**: Core monitoring system with execution patching and report generation
+- **Clean separation**: Easy to maintain, extend, and debug
+
 ### Memory Tracking
 - **GPU Memory**: Uses `torch.cuda.memory_allocated()` and `torch.cuda.memory_reserved()`
 - **Peak Detection**: `torch.cuda.reset_peak_memory_stats()` for per-node peak tracking
@@ -135,7 +141,8 @@ Peak GPU Memory Usage (top nodes):
 - **GPU Support**: NVIDIA CUDA, AMD ROCm (limited), CPU-only
 - **Python versions**: 3.8+
 
-## 📁 Output Location
+
+### 📁 Output Location
 
 Reports are saved to: `ComfyUI/output/reports/execution_report_YYYYMMDD-HHMMSS.txt`
 
@@ -199,17 +206,3 @@ The node provides console output for debugging:
 - **Overhead**: Typically <0.1% of total execution time
 - **Memory**: ~1-5MB additional RAM usage during tracking
 - **Storage**: Report files are typically 5-50KB depending on workflow size
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit issues, feature requests, or pull requests.
-
-## 📄 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## 🙏 Acknowledgments
-
-- ComfyUI community for the amazing framework
-- PyTorch team for excellent GPU memory management tools
-- psutil developers for comprehensive system monitoring capabilities
