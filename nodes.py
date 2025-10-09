@@ -22,7 +22,7 @@ class ExecutionTimeReporter:
     RETURN_TYPES = ()
     FUNCTION = "execute"
     OUTPUT_NODE = True
-    CATEGORY = "Reporting"
+    CATEGORY = "⚫mimikry/Performance"
     DESCRIPTION = "Generates comprehensive execution time and memory usage reports for workflow analysis"
     
     def execute(self):
