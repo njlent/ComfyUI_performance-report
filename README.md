@@ -66,7 +66,7 @@ Operating System: Windows 10
 Architecture: AMD64
 Processor: Intel64 Family 6 Model 142 Stepping 10, GenuineIntel
 Python Version: 3.11.5 (CPython)
-ComfyUI Version: 0.1.0
+ComfyUI Version: 0.3.52
 CPU Cores: 8 physical, 16 logical
 CPU Usage: 45.2%
 CPU Frequency: 2800 MHz (max: 4200 MHz)
