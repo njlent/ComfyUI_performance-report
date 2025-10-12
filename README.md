@@ -33,7 +33,7 @@ A comprehensive performance monitoring and analysis tool for ComfyUI workflows t
 1. **Clone or download** this repository into your ComfyUI custom nodes directory:
    ```bash
    cd ComfyUI/custom_nodes/
-   git clone <repository-url> ComfyUI_ExecutionTimeReporter
+   git clone https://github.com/njlent/ComfyUI_performance-report
    ```
 
 2. **Restart ComfyUI** - the node will be automatically loaded
