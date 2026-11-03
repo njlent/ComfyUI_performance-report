@@ -188,9 +188,18 @@ def get_system_info():
         print(f"[ExecutionTimeReporter] Error getting system info: {e}")
         return None
 
-async def patched_execute(server_instance, dynprompt, caches, current_item, extra_data, executed, prompt_id, execution_list, pending_subgraph_results, pending_async_nodes):
+def read_execute_args(server_instance, dynprompt, caches, current_item, extra_data, executed, prompt_id, *args, **kwargs):
+    """Mirrors the start of ComfyUI's execute() signature; arguments added by newer ComfyUI versions are ignored"""
+    return dynprompt.get_node(current_item)["class_type"], current_item, prompt_id
+
+async def patched_execute(*args, **kwargs):
     """Patched execute function that tracks timing and memory usage"""
-    unique_id = current_item
+    # ComfyUI's arguments are always passed through untouched, so a change in its execute() only skips timing
+    try:
+        class_type, unique_id, prompt_id = read_execute_args(*args, **kwargs)
+    except Exception as e:
+        print(f"[ExecutionTimeReporter] Skipping node timing, ComfyUI's execute() changed: {e}")
+        return await original_execute(*args, **kwargs)
 
     # Initialize tracking for this prompt if needed
     if prompt_id not in execution_timing_data:
@@ -199,7 +208,6 @@ async def patched_execute(server_instance, dynprompt, caches, current_item, extr
         print(f"[ExecutionTimeReporter] Started tracking workflow {prompt_id}")
 
     # Get node information
-    class_type = dynprompt.get_node(unique_id)["class_type"]
     node_title = f"Node {unique_id}"
     real_node_id = unique_id
 
@@ -218,7 +226,7 @@ async def patched_execute(server_instance, dynprompt, caches, current_item, extr
         torch.cuda.reset_peak_memory_stats()
 
     # Call the original execute function
-    result = await original_execute(server_instance, dynprompt, caches, current_item, extra_data, executed, prompt_id, execution_list, pending_subgraph_results, pending_async_nodes)
+    result = await original_execute(*args, **kwargs)
 
     # Record end time and memory stats
     end_time = time.time()
@@ -279,13 +287,13 @@ async def patched_execute(server_instance, dynprompt, caches, current_item, extr
 
     return result
 
-async def patched_execute_async(self, prompt, prompt_id, extra_data=None, execute_outputs=[]):
+async def patched_execute_async(self, prompt, prompt_id, *args, **kwargs):
     """Patched execute_async function that generates reports when workflows complete"""
     # Record workflow start time
     workflow_start_times[prompt_id] = time.time()
 
     # Call the original execute_async function
-    result = await original_execute_async(self, prompt, prompt_id, extra_data, execute_outputs)
+    result = await original_execute_async(self, prompt, prompt_id, *args, **kwargs)
 
     # Check if this workflow contains an ExecutionTimeReporter node
     has_reporter = False
@@ -299,7 +307,11 @@ async def patched_execute_async(self, prompt, prompt_id, extra_data=None, execut
     if has_reporter and prompt_id in execution_timing_data:
         node_count = len(execution_timing_data[prompt_id])
         print(f"[ExecutionTimeReporter] Workflow completed - generating final report for {node_count} nodes...")
-        generate_execution_report(prompt_id, prompt)
+        # An exception here would stop ComfyUI's prompt queue thread
+        try:
+            generate_execution_report(prompt_id, prompt)
+        except Exception as e:
+            print(f"[ExecutionTimeReporter] Failed to write report: {e}")
 
         # Clean up data for this prompt
         if prompt_id in execution_timing_data:
@@ -547,11 +559,15 @@ def setup_monitoring():
     global original_execute, original_execute_async
 
     # Store original functions
-    original_execute = execution.execute
-    original_execute_async = execution.PromptExecutor.execute_async
+    original_execute = getattr(execution, "execute", None)
+    original_execute_async = getattr(getattr(execution, "PromptExecutor", None), "execute_async", None)
+    if original_execute is None or original_execute_async is None:
+        print("[ExecutionTimeReporter] This ComfyUI version is not supported, reports are disabled. Update ComfyUI_performance-report.")
+        return False
 
     # Patch the execute function
     execution.execute = patched_execute
     execution.PromptExecutor.execute_async = patched_execute_async
 
     print("[ExecutionTimeReporter] Monitoring system initialized - execution tracking enabled")
+    return True
