@@ -17,10 +17,9 @@ from .nodes import NODE_CLASS_MAPPINGS, NODE_DISPLAY_NAME_MAPPINGS
 from .monitoring import setup_monitoring
 
 # Set up the execution monitoring system
-setup_monitoring()
-
-print("[ComfyUI_Performance-report] Execution timing and memory monitoring system loaded successfully.")
-print("[ComfyUI_Performance-report] add the -Execution Time Reporter- node to the end of your workflow to save reports.")
+if setup_monitoring():
+    print("[ComfyUI_Performance-report] Execution timing and memory monitoring system loaded successfully.")
+    print("[ComfyUI_Performance-report] add the -Execution Time Reporter- node to the end of your workflow to save reports.")
 
 # Export the mappings for ComfyUI
 __all__ = ['NODE_CLASS_MAPPINGS', 'NODE_DISPLAY_NAME_MAPPINGS']
