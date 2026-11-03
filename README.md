@@ -1,64 +1,36 @@
 # ComfyUI Execution Time Reporter
 
-A comprehensive performance monitoring and analysis tool for ComfyUI workflows that tracks execution time, memory usage, and system resource utilization.
+Times every node in a ComfyUI workflow and records VRAM, RAM and CPU use while it runs. You see the results in a Performance tab inside ComfyUI, and the Execution Time Reporter node writes a text report you can keep or share.
 
-## 🚀 Features
+![Performance tab in the ComfyUI bottom panel](docs/dashboard.jpg)
 
-### ⏱️ **Execution Time Tracking**
-- **Precise timing** for each node in your workflow
-- **Execution order** preservation with chronological numbering
-- **Performance analysis** with nodes ranked by execution time
-- **Overhead calculation** showing ComfyUI framework overhead
+## Installation
 
-### 🧠 **Memory Monitoring**
-- **GPU Memory (VRAM) tracking** - allocation changes and peak usage per node
-- **System Memory (RAM) monitoring** - process and system-wide memory usage
-- **Memory leak detection** - identify nodes that don't release memory properly
-- **Peak usage identification** - find memory bottlenecks in your workflow
+```bash
+cd ComfyUI/custom_nodes/
+git clone https://github.com/njlent/ComfyUI_performance-report
+```
 
-### 💻 **System Information**
-- **Complete hardware profile** - CPU, RAM, GPU specifications
-- **Software environment** - Python, PyTorch, CUDA, ComfyUI versions
-- **Real-time resource usage** - CPU usage, memory availability
-- **GPU details** - VRAM capacity, compute capability, current usage
+Restart ComfyUI. The plugin uses `psutil` and `torch`, which ComfyUI already installs. GPU load in the dashboard also needs `nvidia-ml-py`. On the Windows portable build, install it with `python_embeded\python.exe -m pip install nvidia-ml-py`.
 
-### 📊 **Detailed Reports**
-- **Execution timeline** with memory annotations
-- **Performance rankings** sorted by duration
-- **Memory analysis** with resource-intensive nodes highlighted
-- **System overview** for reproducibility and debugging
+## Performance dashboard
 
-## 📦 Installation
+Click the gauge icon next to Run, or open the bottom panel and pick the Performance tab next to Logs. The plugin records every run, with or without the reporter node.
 
-1. **Clone or download** this repository into your ComfyUI custom nodes directory:
-   ```bash
-   cd ComfyUI/custom_nodes/
-   git clone https://github.com/njlent/ComfyUI_performance-report
-   ```
+The tab shows:
+- the running workflow live, with elapsed time, the current node and its sampler step
+- a timeline of which node ran when, with VRAM, RAM, CPU and GPU load below it. Hover anywhere for the exact values at that moment.
+- the slowest nodes and the total time per node type
+- a sortable table of all nodes with start time, duration and memory change
+- earlier runs of the same workflow, so you can see whether a change made it faster
 
-2. **Restart ComfyUI** - the node will be automatically loaded
+The plugin keeps the last 200 runs in `ComfyUI/user/performance-report/runs/`, so they survive a restart.
 
-3. **Dependencies** (usually already available in ComfyUI):
-   - `psutil` - for system monitoring
-   - `torch` - for GPU memory tracking (optional)
-   - `comfy.model_management` - for ComfyUI integration (optional)
+## Text report
 
-## 🎯 Usage
+Add the Execution Time Reporter node anywhere in a workflow. It needs no connections. When the workflow finishes, the report goes to `ComfyUI/output/reports/execution_report_YYYYMMDD-HHMMSS.txt`.
 
-### Basic Usage
-1. **Add the ExecutionTimeReporter node** to any workflow
-2. **Run your workflow** - timing and memory tracking happens automatically
-3. **Check the report** in `ComfyUI/output/reports/` after completion
-
-### Advanced Usage
-- **No connections required** - the node works independently
-- **Multiple workflows** - each gets its own timestamped report
-- **Memory optimization** - use reports to identify resource bottlenecks
-- **Performance tuning** - compare different workflow configurations
-
-## 📋 Report Format
-
-### System Information Section
+It starts with the system: OS, CPU, RAM, Python, PyTorch, CUDA, GPU and ComfyUI version.
 ```
 SYSTEM INFORMATION:
 --------------------------------------------------------------------------------
@@ -82,7 +54,7 @@ GPU Devices: 1
     Current Usage: 2.34 GB allocated, 2.50 GB reserved
 ```
 
-### Execution Timeline
+Then every node in the order it ran, with its VRAM and RAM change:
 ```
 EXECUTION TIMES (in execution order):
 --------------------------------------------------------------------------------
@@ -93,7 +65,7 @@ EXECUTION TIMES (in execution order):
 # 5 Node   6:    3.972s - VideoCombineTiles_Advanced [GPU: -0.512GB, Peak: 3.676GB]
 ```
 
-### Performance Analysis
+A summary follows with total node time, total workflow time and the time ComfyUI spent between nodes. After that come the nodes sorted by duration:
 ```
 PERFORMANCE ANALYSIS (sorted by duration, slowest first):
 --------------------------------------------------------------------------------
@@ -102,7 +74,7 @@ PERFORMANCE ANALYSIS (sorted by duration, slowest first):
  3. Node   8:    3.167s (12.6%) - VHS_VideoCombine
 ```
 
-### Memory Analysis
+The memory analysis lists nodes whose VRAM changed by more than 1 MB or RAM by more than 10 MB, and the nodes with the highest VRAM peak:
 ```
 MEMORY ANALYSIS:
 --------------------------------------------------------------------------------
@@ -116,93 +88,40 @@ Peak GPU Memory Usage (top nodes):
   Node   6:    3.676GB - VideoCombineTiles_Advanced
 ```
 
-## 🔧 Technical Details
+## Reading the results
 
-### Modular Architecture
-- **`__init__.py`**: Main module initialization, imports nodes and monitoring system
-- **`nodes.py`**: Contains the ExecutionTimeReporter node class and ComfyUI mappings
-- **`monitoring.py`**: Core monitoring system with execution patching and report generation
-- **Clean separation**: Easy to maintain, extend, and debug
+- Start with the slowest nodes. In most image workflows the samplers take the bulk of the time, so a slow loader or VAE decode stands out.
+- A node with a large positive VRAM or RAM change keeps that memory after it finishes. If a later node runs out of memory, look there first.
+- The first run of a workflow includes loading the models. When you test settings, compare the runs after it in the workflow history chart.
+- High CPU load with low GPU load during a node usually means that node does its work on the CPU.
 
-### Memory Tracking
-- **GPU Memory**: Uses `torch.cuda.memory_allocated()` and `torch.cuda.memory_reserved()`
-- **Peak Detection**: `torch.cuda.reset_peak_memory_stats()` for per-node peak tracking
-- **System Memory**: `psutil.Process().memory_info()` for process-specific tracking
-- **Smart Filtering**: Only shows significant changes (>1MB GPU, >10MB RAM)
+## How it works
 
-### Performance Impact
-- **Minimal overhead** - typically <0.1% of total execution time
-- **Non-intrusive** - doesn't modify your workflow logic
-- **Memory efficient** - cleans up tracking data after report generation
+The plugin wraps ComfyUI's `execution.execute` and `PromptExecutor.execute_async` to time each node and each run. While a workflow runs, a background thread samples memory and CPU every 0.5 seconds. If a ComfyUI update changes the functions it wraps, timing switches off with a message in the console and your workflows keep running.
 
-### Compatibility
-- **ComfyUI versions**: All recent versions
-- **Operating Systems**: Windows, Linux, macOS
-- **GPU Support**: NVIDIA CUDA, AMD ROCm (limited), CPU-only
-- **Python versions**: 3.8+
+The per-node VRAM numbers come from `torch.cuda.memory_allocated()` and `torch.cuda.max_memory_allocated()`, so they only count what PyTorch holds. The dashboard's "VRAM used" line comes from `torch.cuda.mem_get_info()` and counts everything on the GPU, other programs included. RAM is the resident memory of the ComfyUI process, read with `psutil`.
 
+Files:
+- `monitoring.py` wraps ComfyUI's execution and writes the text report
+- `dashboard.py` records runs and serves them under `/api/performance-report/`
+- `nodes.py` defines the Execution Time Reporter node
+- `web/` holds the Performance tab and the toolbar button
 
-### 📁 Output Location
+## Compatibility
 
-Reports are saved to: `ComfyUI/output/reports/execution_report_YYYYMMDD-HHMMSS.txt`
+Tested on Windows with an NVIDIA GPU, ComfyUI 0.43 and frontend 1.58. Without CUDA the plugin still tracks time and RAM, just no VRAM. The Performance tab needs a frontend recent enough to support extension tabs in the bottom panel.
 
-## 💡 Best Practices
+## Troubleshooting
 
-### Workflow Optimization
-1. **Identify bottlenecks** - Focus on nodes taking >10% of total time
-2. **Memory management** - Watch for nodes with large positive memory deltas
-3. **Batch processing** - Compare single vs batch processing performance
-4. **Model loading** - Track VRAM usage for different model combinations
+- No report file. The plugin only writes the report when the workflow contains the Execution Time Reporter node and that node ran. It always goes to `ComfyUI/output/reports/`, even when ComfyUI runs with `--output-directory`.
+- No VRAM numbers. PyTorch needs CUDA for those.
+- The dashboard says "GPU load needs the nvidia-ml-py package". Install it as shown under Installation and restart ComfyUI.
+- A workflow failed. The report and the dashboard still cover the nodes that ran before the error.
 
-### Performance Analysis
-- **Compare configurations** - Test different settings and compare reports
-- **Monitor trends** - Track performance changes over time
-- **Resource planning** - Use memory stats to plan hardware requirements
-- **Debugging** - Identify problematic nodes causing slowdowns or memory issues
-
-## 📊 Example Use Cases
-
-### 1. Video Processing Workflow
-```
-Typical bottlenecks found:
-- Video loading: High I/O time
-- AI processing: High GPU memory usage
-- Encoding: High CPU usage
-```
-
-### 2. Image Generation Pipeline
-```
-Common patterns:
-- Model loading: Initial VRAM spike
-- Sampling: Consistent GPU usage
-- Post-processing: CPU-intensive
-```
-
-### 3. Batch Processing Analysis
-```
-Scaling insights:
-- Memory usage per batch size
-- Processing time vs quality trade-offs
-- Optimal batch sizes for your hardware
-```
-
-## 🐛 Troubleshooting
-
-### Common Issues
-1. **"No timing data found"** - Ensure the ExecutionTimeReporter node is in your workflow
-2. **Missing GPU stats** - PyTorch with CUDA support required for GPU memory tracking
-3. **Permission errors** - Check write permissions for the output/reports directory
-4. **Incomplete reports** - Workflow must complete successfully for full report generation
-
-### Debug Information
-The node provides console output for debugging:
+Each node also prints its time to the console, so you can check that tracking works:
 ```
 [ExecutionTimeReporter] Started tracking workflow abc123...
+[ExecutionTimeReporter] Node 3 (KSampler): 5.920s [Total nodes tracked: 5]
 [ExecutionTimeReporter] Workflow completed - generating final report for 8 nodes...
 [ExecutionTimeReporter] Report saved to: .../execution_report_20251008-231542.txt
 ```
-
-### Performance Impact
-- **Overhead**: Typically <0.1% of total execution time
-- **Memory**: ~1-5MB additional RAM usage during tracking
-- **Storage**: Report files are typically 5-50KB depending on workflow size
