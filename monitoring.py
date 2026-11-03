@@ -11,6 +11,7 @@ import gc
 from datetime import datetime
 import execution
 import server
+from . import dashboard
 
 # Try to import torch for GPU memory tracking
 try:
@@ -190,13 +191,14 @@ def get_system_info():
 
 def read_execute_args(server_instance, dynprompt, caches, current_item, extra_data, executed, prompt_id, *args, **kwargs):
     """Mirrors the start of ComfyUI's execute() signature; arguments added by newer ComfyUI versions are ignored"""
-    return dynprompt.get_node(current_item)["class_type"], current_item, prompt_id
+    node = dynprompt.get_node(current_item)
+    return node["class_type"], node.get("_meta", {}).get("title", node["class_type"]), current_item, prompt_id
 
 async def patched_execute(*args, **kwargs):
     """Patched execute function that tracks timing and memory usage"""
     # ComfyUI's arguments are always passed through untouched, so a change in its execute() only skips timing
     try:
-        class_type, unique_id, prompt_id = read_execute_args(*args, **kwargs)
+        class_type, display_title, unique_id, prompt_id = read_execute_args(*args, **kwargs)
     except Exception as e:
         print(f"[ExecutionTimeReporter] Skipping node timing, ComfyUI's execute() changed: {e}")
         return await original_execute(*args, **kwargs)
@@ -224,6 +226,8 @@ async def patched_execute(*args, **kwargs):
     # Reset GPU memory stats to track peak usage for this node
     if TORCH_AVAILABLE and torch.cuda.is_available():
         torch.cuda.reset_peak_memory_stats()
+
+    dashboard.node_started(unique_id, class_type, display_title, start_time)
 
     # Call the original execute function
     result = await original_execute(*args, **kwargs)
@@ -282,18 +286,42 @@ async def patched_execute(*args, **kwargs):
         "execution_order": execution_order,
         "memory_stats": memory_stats
     }
+    dashboard.node_finished(unique_id, class_type, display_title, execution_timing_data[prompt_id][unique_id])
 
     print(f"[ExecutionTimeReporter] Node {real_node_id} ({class_type}): {duration:.3f}s [Total nodes tracked: {len(execution_timing_data[prompt_id])}]")
 
     return result
+
+def run_status(executor):
+    """Final state of a run, read from the status messages ComfyUI collects for its history"""
+    events = [message[0] for message in executor.status_messages]
+    if "execution_interrupted" in events:
+        return "interrupted"
+    if "execution_error" in events:
+        return "error"
+    return "success"
 
 async def patched_execute_async(self, prompt, prompt_id, *args, **kwargs):
     """Patched execute_async function that generates reports when workflows complete"""
     # Record workflow start time
     workflow_start_times[prompt_id] = time.time()
 
-    # Call the original execute_async function
-    result = await original_execute_async(self, prompt, prompt_id, *args, **kwargs)
+    # Exceptions in the dashboard code must not reach ComfyUI, they would stop its prompt queue thread
+    try:
+        dashboard.start_run(prompt_id, prompt)
+    except Exception as e:
+        print(f"[ExecutionTimeReporter] Failed to start recording the run for the dashboard: {e}")
+
+    completed = False
+    try:
+        # Call the original execute_async function
+        result = await original_execute_async(self, prompt, prompt_id, *args, **kwargs)
+        completed = True
+    finally:
+        try:
+            dashboard.finish_run(prompt_id, run_status(self) if completed else "error")
+        except Exception as e:
+            print(f"[ExecutionTimeReporter] Failed to save the run for the dashboard: {e}")
 
     # Check if this workflow contains an ExecutionTimeReporter node
     has_reporter = False
@@ -313,13 +341,10 @@ async def patched_execute_async(self, prompt, prompt_id, *args, **kwargs):
         except Exception as e:
             print(f"[ExecutionTimeReporter] Failed to write report: {e}")
 
-        # Clean up data for this prompt
-        if prompt_id in execution_timing_data:
-            del execution_timing_data[prompt_id]
-        if prompt_id in workflow_start_times:
-            del workflow_start_times[prompt_id]
-        if prompt_id in execution_order_counter:
-            del execution_order_counter[prompt_id]
+    # Clean up data for this prompt
+    execution_timing_data.pop(prompt_id, None)
+    workflow_start_times.pop(prompt_id, None)
+    execution_order_counter.pop(prompt_id, None)
 
     return result
 

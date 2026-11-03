@@ -21,5 +21,8 @@ if setup_monitoring():
     print("[ComfyUI_Performance-report] Execution timing and memory monitoring system loaded successfully.")
     print("[ComfyUI_Performance-report] add the -Execution Time Reporter- node to the end of your workflow to save reports.")
 
+# Frontend extension: the Performance tab in the bottom panel and its action bar button
+WEB_DIRECTORY = "./web"
+
 # Export the mappings for ComfyUI
-__all__ = ['NODE_CLASS_MAPPINGS', 'NODE_DISPLAY_NAME_MAPPINGS']
+__all__ = ['NODE_CLASS_MAPPINGS', 'NODE_DISPLAY_NAME_MAPPINGS', 'WEB_DIRECTORY']

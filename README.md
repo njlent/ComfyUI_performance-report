@@ -50,6 +50,17 @@ A comprehensive performance monitoring and analysis tool for ComfyUI workflows t
 2. **Run your workflow** - timing and memory tracking happens automatically
 3. **Check the report** in `ComfyUI/output/reports/` after completion
 
+### Performance Dashboard
+![Performance tab in the ComfyUI bottom panel](docs/dashboard.jpg)
+
+Click the gauge icon next to **Run**, or open the bottom panel and pick the **Performance** tab next to **Logs**. Every run is recorded, with or without the reporter node:
+- **Live view** of the running workflow: elapsed time, current node and sampler steps
+- **Timeline** of which node ran when, with VRAM, RAM, CPU and GPU load over time (hover for exact values)
+- **Slowest nodes** and **time by node type**, plus a sortable table of all nodes
+- **Workflow history** comparing each run against earlier runs of the same workflow
+
+The last 200 runs are kept in `ComfyUI/user/performance-report/runs/`. GPU load needs the optional `nvidia-ml-py` package.
+
 ### Advanced Usage
 - **No connections required** - the node works independently
 - **Multiple workflows** - each gets its own timestamped report
@@ -122,6 +133,8 @@ Peak GPU Memory Usage (top nodes):
 - **`__init__.py`**: Main module initialization, imports nodes and monitoring system
 - **`nodes.py`**: Contains the ExecutionTimeReporter node class and ComfyUI mappings
 - **`monitoring.py`**: Core monitoring system with execution patching and report generation
+- **`dashboard.py`**: Records runs for the dashboard and serves them under `/api/performance-report/`
+- **`web/`**: The Performance tab in the bottom panel and its action bar button
 - **Clean separation**: Easy to maintain, extend, and debug
 
 ### Memory Tracking
